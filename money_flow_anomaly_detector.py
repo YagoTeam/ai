@@ -8,12 +8,17 @@ import numpy as np
 from data.provider import MarketDataProvider, normalize_symbol
 
 
+<<<<<<< HEAD
 _PROVIDER: MarketDataProvider | None = None
+=======
+provider = MarketDataProvider()
+>>>>>>> 2004d99fcefc2dc48ac49478e3bc432e5b7a1c6b
 SNAPSHOT_CACHE: dict[str, dict[str, Any]] = {}
 ANOMALY_CACHE: dict[str, Any] = {"timestamp": 0.0, "rows": []}
 ANOMALY_CACHE_TTL = 60
 
 
+<<<<<<< HEAD
 def _provider() -> MarketDataProvider:
     global _PROVIDER
     if _PROVIDER is None:
@@ -21,6 +26,8 @@ def _provider() -> MarketDataProvider:
     return _PROVIDER
 
 
+=======
+>>>>>>> 2004d99fcefc2dc48ac49478e3bc432e5b7a1c6b
 def scan_money_flow_anomalies(watchlist: list[dict[str, Any]]) -> list[dict[str, Any]]:
     if ANOMALY_CACHE["rows"] and time.time() - float(ANOMALY_CACHE["timestamp"]) <= ANOMALY_CACHE_TTL:
         return [dict(row) for row in ANOMALY_CACHE["rows"]]
@@ -38,7 +45,11 @@ def scan_money_flow_anomalies(watchlist: list[dict[str, Any]]) -> list[dict[str,
 
 def detect_money_flow_anomaly(symbol: str) -> dict[str, Any]:
     normalized = normalize_symbol(symbol)
+<<<<<<< HEAD
     quote = _provider().get_realtime_quote(normalized)
+=======
+    quote = provider.get_realtime_quote(normalized)
+>>>>>>> 2004d99fcefc2dc48ac49478e3bc432e5b7a1c6b
     now_snapshot = _snapshot(quote)
     prev = SNAPSHOT_CACHE.get(normalized)
     SNAPSHOT_CACHE[normalized] = now_snapshot

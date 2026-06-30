@@ -6,14 +6,22 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+<<<<<<< HEAD
 from data.provider import MarketDataProvider, normalize_symbol
 
 
 _PROVIDER: MarketDataProvider | None = None
+=======
+from data.provider import DataProviderError, MarketDataProvider, normalize_symbol
+
+
+provider = MarketDataProvider()
+>>>>>>> 2004d99fcefc2dc48ac49478e3bc432e5b7a1c6b
 SIGNAL_CACHE: dict[str, Any] = {"timestamp": 0.0, "rows": []}
 SIGNAL_CACHE_TTL = 60
 
 
+<<<<<<< HEAD
 def _provider() -> MarketDataProvider:
     global _PROVIDER
     if _PROVIDER is None:
@@ -21,6 +29,8 @@ def _provider() -> MarketDataProvider:
     return _PROVIDER
 
 
+=======
+>>>>>>> 2004d99fcefc2dc48ac49478e3bc432e5b7a1c6b
 def scan_intraday_signals(watchlist: list[dict[str, Any]]) -> list[dict[str, Any]]:
     if SIGNAL_CACHE["rows"] and time.time() - float(SIGNAL_CACHE["timestamp"]) <= SIGNAL_CACHE_TTL:
         return [dict(row) for row in SIGNAL_CACHE["rows"]]
@@ -37,7 +47,10 @@ def scan_intraday_signals(watchlist: list[dict[str, Any]]) -> list[dict[str, Any
 
 
 def generate_intraday_signal(symbol: str, v4_score: float = 50.0, base_risk: str = "MEDIUM") -> dict[str, Any]:
+<<<<<<< HEAD
     provider = _provider()
+=======
+>>>>>>> 2004d99fcefc2dc48ac49478e3bc432e5b7a1c6b
     quote = provider.get_realtime_quote(symbol)
     bars = provider.get_daily_bars(symbol, days=60)
     features = _features(quote, bars)
