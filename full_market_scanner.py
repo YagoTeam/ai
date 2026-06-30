@@ -16,17 +16,12 @@ from risk_control_engine import assess_risk, filter_high_risk
 from sector_rotation_engine import classify_sector, sector_rankings
 
 
-<<<<<<< HEAD
 _PROVIDER: MarketDataProvider | None = None
-=======
-provider = MarketDataProvider()
->>>>>>> 2004d99fcefc2dc48ac49478e3bc432e5b7a1c6b
 SCAN_CACHE: dict[str, Any] = {"timestamp": 0.0, "rows": [], "universe_size": 0, "status": ""}
 SCAN_CACHE_TTL = 300
 PREFIXES = ("000", "002", "300", "600", "601", "603", "688")
 
 
-<<<<<<< HEAD
 def _provider() -> MarketDataProvider:
     global _PROVIDER
     if _PROVIDER is None:
@@ -34,8 +29,6 @@ def _provider() -> MarketDataProvider:
     return _PROVIDER
 
 
-=======
->>>>>>> 2004d99fcefc2dc48ac49478e3bc432e5b7a1c6b
 def scan_full_market_top10(limit: int = 10) -> list[dict[str, Any]]:
     if SCAN_CACHE["rows"] and time.time() - float(SCAN_CACHE["timestamp"]) < SCAN_CACHE_TTL:
         return [dict(row) for row in SCAN_CACHE["rows"][:limit]]
@@ -140,11 +133,7 @@ def _fetch_akshare_spot() -> list[dict[str, Any]]:
     if os.getenv("MARKET_ENABLE_AK_FULL_SCAN") != "1":
         return []
     try:
-<<<<<<< HEAD
         frame = _provider().stock_spot()
-=======
-        frame = provider.stock_spot()
->>>>>>> 2004d99fcefc2dc48ac49478e3bc432e5b7a1c6b
     except Exception:
         return []
     rows = []

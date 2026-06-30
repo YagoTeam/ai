@@ -8,16 +8,7 @@ import numpy as np
 import pandas as pd
 import requests
 
-<<<<<<< HEAD
 from data.provider import DataProviderError
-
-
-=======
-from data.provider import DataProviderError, MarketDataProvider
-
-
-provider = MarketDataProvider()
->>>>>>> 2004d99fcefc2dc48ac49478e3bc432e5b7a1c6b
 MARKET_CACHE: dict[str, Any] = {"timestamp": 0.0, "data": None}
 MARKET_CACHE_TTL = 300
 INDEXES = {"上证指数": "1.000001", "创业板指": "0.399006"}
