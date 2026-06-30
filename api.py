@@ -3,12 +3,20 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from fastapi import FastAPI, Query
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from services import engine_loader
 
 
 app = FastAPI(title="A股AI量化分析API", version="5.0.0")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 class SearchRequest(BaseModel):
