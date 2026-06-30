@@ -201,6 +201,8 @@ def portfolio_analyze(
         "symbol": analysis.get("symbol"),
         "name": analysis.get("name"),
         "current_price": price,
+        "cost_price": round(cost, 2),
+        "shares": shares,
         "market_value": market_value,
         "cost_amount": cost_amount,
         "floating_profit": floating_profit,
@@ -228,7 +230,7 @@ def enrich_analysis_result(result: dict[str, Any]) -> dict[str, Any]:
 def build_entry_plan(result: dict[str, Any]) -> dict[str, Any]:
     price = _num(result.get("price")) or 0.0
     score = _num(result.get("score")) or 50.0
-    risk = str(result.get("risk_level") or (result.get("signals") or {}).get("risk_level") or "MEDIUM")
+    risk = str(result.get("risk_level") or _signal_risk_level(result.get("signals")) or "MEDIUM")
     technical = result.get("technical") or result.get("technical_data", {}).get("value") or {}
     ma20 = _num(technical.get("ma20"))
     ma60 = _num(technical.get("ma60"))
@@ -405,6 +407,16 @@ def _portfolio_reason(analysis: dict[str, Any], floating_profit_ratio: float, ri
     recommendation = analysis.get("recommendation") or "HOLD"
     profit_text = "已有浮盈" if floating_profit_ratio > 0 else "目前浮亏"
     return f"{profit_text} {abs(floating_profit_ratio):.2f}%，综合评分 {score:.2f}，系统建议 {recommendation}，风险偏好为{risk_preference}。操作重点是按止损位和分批价格执行，不要情绪化补仓。"
+
+
+def _signal_risk_level(signals: Any) -> str | None:
+    if isinstance(signals, dict):
+        return signals.get("risk_level")
+    if isinstance(signals, list):
+        for item in signals:
+            if isinstance(item, dict) and item.get("risk_level"):
+                return item.get("risk_level")
+    return None
 
 
 def _num(value: Any) -> float | None:

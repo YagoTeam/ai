@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   analyzeStock,
   intradaySignals,
   marketOverview,
   moneyFlowAnomalies,
   portfolioAnalyze,
+  healthCheck,
   screenStocks,
   searchStock,
   stockDetail
@@ -410,7 +411,37 @@ export default function App() {
   const [loading, setLoading] = useState({});
   const [errors, setErrors] = useState({});
   const [stepIndex, setStepIndex] = useState(0);
+  const [serverStatus, setServerStatus] = useState({ state: "checking", text: "" });
   const cacheRef = useRef(new Map());
+
+  useEffect(() => {
+    let alive = true;
+    async function checkServer() {
+      setServerStatus((current) => current.state === "ok" ? current : { state: "checking", text: "" });
+      try {
+        const result = await healthCheck(8000);
+        if (!alive) return;
+        if (result.ok) {
+          setServerStatus({ state: "ok", text: "服务器运行正常" });
+        } else {
+          setServerStatus({ state: "down", text: "服务器暂时不可用，请稍后重试。" });
+        }
+      } catch (error) {
+        if (!alive) return;
+        if (error?.name === "AbortError") {
+          setServerStatus({ state: "waking", text: "服务器正在唤醒，首次请求可能需要 30-60 秒。" });
+        } else {
+          setServerStatus({ state: "down", text: "服务器暂时不可用，请稍后重试。" });
+        }
+      }
+    }
+    checkServer();
+    const timer = window.setInterval(checkServer, 60_000);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+    };
+  }, []);
 
   useEffect(() => {
     const query = keyword.trim();
@@ -528,11 +559,10 @@ export default function App() {
         available_cash: Number(portfolioForm.available_cash),
         max_position_ratio: Number(portfolioForm.max_position_ratio),
       };
-      setPortfolio(await portfolioAnalyze(payload));
+      const result = await portfolioAnalyze(payload);
+      setPortfolio(isObject(result) ? result : {});
     });
   }
-
-  const coldStartTip = useMemo(() => "服务器正在唤醒时，首次请求可能需要 30-60 秒。", []);
 
   return (
     <div className="app-shell">
@@ -541,7 +571,7 @@ export default function App() {
           <p className="eyebrow">后端服务：https://ai11.onrender.com</p>
           <h1>A股AI量化投资系统</h1>
         </div>
-        <div className="health-pill">{coldStartTip}</div>
+        {serverStatus.state === "ok" ? null : <div className={`health-pill ${serverStatus.state}`}>{serverStatus.text}</div>}
       </header>
 
       <nav className="tabs">
@@ -617,8 +647,8 @@ export default function App() {
             <StatusBlock loading={loading.portfolio} loadingText="正在结合当前行情和你的成本分析..." error={errors.portfolio} empty={!portfolio && !loading.portfolio} emptyText="填写成本和仓位后，系统会给出是否持有、补仓、减仓或止损建议。" />
             {portfolio ? (
               <div className="analysis-panel">
-                <InfoGrid data={portfolio} fields={["name", "symbol", "current_price", "market_value", "cost_amount", "floating_profit", "floating_profit_ratio", "position_advice", "add_position_price", "reduce_position_price", "stop_loss_price"]} />
-                <div className="conclusion-card"><h3>后续操作建议</h3><p>{portfolio.reason}</p><p>{portfolio.next_action}</p></div>
+                <InfoGrid data={portfolio} fields={["name", "symbol", "current_price", "cost_price", "shares", "market_value", "cost_amount", "floating_profit", "floating_profit_ratio", "position_advice", "add_position_price", "reduce_position_price", "stop_loss_price"]} />
+                <div className="conclusion-card"><h3>后续操作建议</h3><p>{portfolio.reason || "暂无可靠数据"}</p><p>{portfolio.next_action || "暂无可靠数据"}</p></div>
               </div>
             ) : null}
           </SectionCard>

@@ -82,3 +82,18 @@ export function portfolioAnalyze(payload) {
     body: JSON.stringify(payload)
   });
 }
+
+export async function healthCheck(timeoutMs = 8000) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(`${API_BASE_URL}/health`, {
+      method: "GET",
+      signal: controller.signal
+    });
+    const payload = await response.json();
+    return { ok: response.ok && payload?.success === true, timeout: false, payload };
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
