@@ -225,7 +225,7 @@ def wecom_test(payload: WeComTestRequest) -> dict[str, Any]:
 
 
 @app.post("/feishu/callback")
-async def feishu_callback(request: Request) -> JSONResponse:
+async def feishu_callback(request: Request, background_tasks: BackgroundTasks) -> JSONResponse:
     body = await request.json()
     print("Feishu callback received:", body, flush=True)
 
@@ -241,5 +241,10 @@ async def feishu_callback(request: Request) -> JSONResponse:
 
     if event_type == "url_verification" or challenge:
         return JSONResponse({"challenge": challenge})
+
+    if event_type == "im.message.receive_v1":
+        from services import feishu_service
+
+        background_tasks.add_task(feishu_service.handle_message_event, body)
 
     return JSONResponse({"code": 0, "msg": "ok"})
