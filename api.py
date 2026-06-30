@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from fastapi import FastAPI, Query
+from fastapi import BackgroundTasks, FastAPI, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from services import engine_loader
@@ -56,6 +57,10 @@ class PortfolioAnalyzeRequest(BaseModel):
     available_cash: float = 0
     max_position_ratio: float = 0.3
     risk_preference: str = "稳健"
+
+
+class WeComTestRequest(BaseModel):
+    text: str
 
 
 def _ok(data: Any) -> dict[str, Any]:
@@ -161,3 +166,80 @@ def portfolio_analyze(payload: PortfolioAnalyzeRequest) -> dict[str, Any]:
         payload.max_position_ratio,
         payload.risk_preference,
     )
+
+
+@app.get("/wecom/callback")
+def wecom_callback_verify(
+    msg_signature: str = Query(""),
+    timestamp: str = Query(""),
+    nonce: str = Query(""),
+    echostr: str = Query(""),
+) -> Response:
+    from services import wecom_service
+
+    try:
+        if not wecom_service.verify_signature(msg_signature, timestamp, nonce, echostr):
+            return Response("invalid signature", status_code=403, media_type="text/plain")
+        plain = wecom_service.verify_url(echostr)
+        return Response(plain, media_type="text/plain")
+    except Exception as exc:
+        return Response(f"wecom verify failed: {exc}", status_code=500, media_type="text/plain")
+
+
+@app.post("/wecom/callback")
+async def wecom_callback_message(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    msg_signature: str = Query(""),
+    timestamp: str = Query(""),
+    nonce: str = Query(""),
+) -> Response:
+    from services import wecom_service
+
+    try:
+        raw_body = await request.body()
+        encrypted = wecom_service.extract_encrypt(raw_body)
+        if encrypted and not wecom_service.verify_signature(msg_signature, timestamp, nonce, encrypted):
+            return Response("invalid signature", status_code=403, media_type="text/plain")
+        message = wecom_service.parse_callback_xml(raw_body)
+        if not message.content:
+            reply = wecom_service.HELP_TEXT
+            return Response(wecom_service.build_passive_text_response(message, reply), media_type="application/xml")
+
+        if wecom_service.has_group_webhook():
+            background_tasks.add_task(wecom_service.build_async_and_push, message.content)
+            reply = "正在分析，请稍等。"
+        else:
+            reply = wecom_service.build_reply_for_text(message.content)
+        return Response(wecom_service.build_passive_text_response(message, reply), media_type="application/xml")
+    except Exception as exc:
+        fallback = f"分析失败，可能是数据源暂时不可用，请稍后再试。\n错误：{exc}"
+        return Response(fallback, status_code=200, media_type="text/plain")
+
+
+@app.post("/wecom/test")
+def wecom_test(payload: WeComTestRequest) -> dict[str, Any]:
+    from services import wecom_service
+
+    return _safe(wecom_service.test_command, payload.text)
+
+
+@app.post("/feishu/callback")
+async def feishu_callback(request: Request) -> JSONResponse:
+    body = await request.json()
+    print("Feishu callback received:", body, flush=True)
+
+    challenge = body.get("challenge")
+    event = body.get("event")
+    if not challenge and isinstance(event, dict):
+        challenge = event.get("challenge")
+
+    header = body.get("header")
+    event_type = body.get("type")
+    if not event_type and isinstance(header, dict):
+        event_type = header.get("event_type")
+
+    if event_type == "url_verification" or challenge:
+        return JSONResponse({"challenge": challenge})
+
+    return JSONResponse({"code": 0, "msg": "ok"})

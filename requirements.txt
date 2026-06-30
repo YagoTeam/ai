@@ -8,3 +8,4 @@ pydantic
 flask
 tushare
 pypinyin
+pycryptodome
