@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import time
 from dataclasses import dataclass
 from datetime import date, timedelta
 from functools import lru_cache
@@ -71,6 +72,9 @@ class MarketDataProvider:
     def __init__(self, tushare_token: str | None = None):
         self.tushare_token = tushare_token or os.getenv("TUSHARE_TOKEN")
         self.timeout = float(os.getenv("MARKET_HTTP_TIMEOUT", "8"))
+        self._search_index: pd.DataFrame | None = None
+        self._search_index_ts = 0.0
+        self._search_index_ttl = 24 * 60 * 60
 
     @lru_cache(maxsize=1)
     def stock_master(self) -> pd.DataFrame:
@@ -124,13 +128,24 @@ class MarketDataProvider:
                 return [{"code": normalized, "name": quote.get("name") or ""}]
             except DataProviderError:
                 return [{"code": normalized, "name": ""}]
-        frame = self.stock_master()
+        frame = self._stock_search_index()
         code_plain = frame["code"].str.split(".").str[0]
         mask = frame["code"].str.upper().str.contains(query, regex=False)
         mask |= code_plain.str.contains(query, regex=False)
         mask |= frame["name"].astype(str).str.contains(query, regex=False)
+        if "initials" in frame.columns:
+            mask |= frame["initials"].astype(str).str.contains(query, regex=False)
         rows = frame.loc[mask, ["code", "name"]].head(limit)
         return rows.to_dict(orient="records")
+
+    def _stock_search_index(self) -> pd.DataFrame:
+        if self._search_index is not None and time.time() - self._search_index_ts < self._search_index_ttl:
+            return self._search_index
+        frame = self.stock_master().copy()
+        frame["initials"] = frame["name"].astype(str).map(_name_initials)
+        self._search_index = frame
+        self._search_index_ts = time.time()
+        return frame
 
     def get_realtime_quote(self, symbol: str) -> dict[str, float | str | None]:
         normalized = normalize_symbol(symbol)
@@ -229,7 +244,7 @@ class MarketDataProvider:
 
     def get_fundamental(self, symbol: str) -> dict[str, float | None]:
         normalized = normalize_symbol(symbol)
-        result = {"pe": None, "pb": None, "roe": None, "revenue_growth": None}
+        result = {"pe": None, "pb": None, "roe": None, "revenue_growth": None, "net_profit_growth": None, "gross_margin": None, "net_margin": None, "debt_ratio": None}
         try:
             quote = self._tencent_quote(normalized)
             result["pe"] = quote.get("pe")
@@ -280,6 +295,10 @@ class MarketDataProvider:
             row = indicator.iloc[0]
             result["roe"] = result["roe"] if result["roe"] is not None else _to_float(row.get("roe"))
             result["revenue_growth"] = result["revenue_growth"] if result["revenue_growth"] is not None else _to_float(row.get("or_yoy"))
+            result["net_profit_growth"] = result["net_profit_growth"] if result["net_profit_growth"] is not None else _to_float(row.get("netprofit_yoy"))
+            result["gross_margin"] = result["gross_margin"] if result["gross_margin"] is not None else _to_float(row.get("grossprofit_margin"))
+            result["net_margin"] = result["net_margin"] if result["net_margin"] is not None else _to_float(row.get("netprofit_margin"))
+            result["debt_ratio"] = result["debt_ratio"] if result["debt_ratio"] is not None else _to_float(row.get("debt_to_assets"))
         except Exception:
             return
 
@@ -512,3 +531,20 @@ class MarketDataProvider:
                 result["roe"] = latest
             if result["revenue_growth"] is None and ("营业总收入同比增长率" in label or "营业收入同比增长率" in label):
                 result["revenue_growth"] = latest
+            if result.get("net_profit_growth") is None and ("净利润同比增长率" in label or "归母净利润同比增长率" in label):
+                result["net_profit_growth"] = latest
+            if result.get("gross_margin") is None and ("销售毛利率" in label or "毛利率" in label):
+                result["gross_margin"] = latest
+            if result.get("net_margin") is None and ("销售净利率" in label or "净利率" in label):
+                result["net_margin"] = latest
+            if result.get("debt_ratio") is None and ("资产负债率" in label):
+                result["debt_ratio"] = latest
+
+
+def _name_initials(name: str) -> str:
+    try:
+        from pypinyin import Style, lazy_pinyin
+
+        return "".join(lazy_pinyin(str(name), style=Style.FIRST_LETTER)).upper()
+    except Exception:
+        return ""

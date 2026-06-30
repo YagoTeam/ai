@@ -75,3 +75,10 @@ export function moneyFlowAnomalies() {
     body: JSON.stringify({ limit: 10 })
   });
 }
+
+export function portfolioAnalyze(payload) {
+  return request("/portfolio/analyze", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}

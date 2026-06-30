@@ -49,6 +49,15 @@ class BacktestRequest(BaseModel):
     days: int = 180
 
 
+class PortfolioAnalyzeRequest(BaseModel):
+    symbol: str
+    cost_price: float
+    shares: int
+    available_cash: float = 0
+    max_position_ratio: float = 0.3
+    risk_preference: str = "稳健"
+
+
 def _ok(data: Any) -> dict[str, Any]:
     return {"success": True, "data": data, "error": ""}
 
@@ -138,4 +147,17 @@ def backtest_strategy(payload: BacktestRequest) -> dict[str, Any]:
         payload.short_window,
         payload.long_window,
         payload.days,
+    )
+
+
+@app.post("/portfolio/analyze")
+def portfolio_analyze(payload: PortfolioAnalyzeRequest) -> dict[str, Any]:
+    return _safe(
+        engine_loader.portfolio_analyze,
+        payload.symbol,
+        payload.cost_price,
+        payload.shares,
+        payload.available_cash,
+        payload.max_position_ratio,
+        payload.risk_preference,
     )
