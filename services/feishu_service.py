@@ -8,6 +8,8 @@ from typing import Any
 
 import requests
 
+from services import conversation_memory
+
 
 HELP_TEXT = """可用指令：
 1. @小牛牛 德明利
@@ -25,6 +27,8 @@ def handle_message_event(body: dict[str, Any]) -> None:
     parsed = parse_message_event(body)
     message_id = parsed.get("message_id", "")
     clean_text = parsed.get("clean_text", "")
+    chat_id = parsed.get("chat_id", "")
+    user_id = parsed.get("user_id", "")
     print(f"Feishu clean_text: {clean_text}", flush=True)
 
     if not message_id:
@@ -40,7 +44,8 @@ def handle_message_event(body: dict[str, Any]) -> None:
     try:
         from services import nlp_query_service
 
-        result = nlp_query_service.answer_user_question(clean_text)
+        context = conversation_memory.get_context(chat_id, user_id)
+        result = nlp_query_service.answer_user_question(clean_text, context=context, chat_id=chat_id, user_id=user_id)
         analysis_reply = result.get("reply") if isinstance(result, dict) else ""
         if analysis_reply:
             reply_feishu_message(message_id, analysis_reply)
@@ -52,12 +57,16 @@ def handle_message_event(body: dict[str, Any]) -> None:
 def parse_message_event(body: dict[str, Any]) -> dict[str, str]:
     event = body.get("event") if isinstance(body.get("event"), dict) else {}
     message = event.get("message") if isinstance(event.get("message"), dict) else {}
+    sender = event.get("sender") if isinstance(event.get("sender"), dict) else {}
+    sender_id = sender.get("sender_id") if isinstance(sender.get("sender_id"), dict) else {}
     message_id = str(message.get("message_id") or "")
+    chat_id = str(message.get("chat_id") or "")
+    user_id = str(sender_id.get("open_id") or sender_id.get("user_id") or "")
     text = _content_text(message.get("content"))
     for key in _mention_keys(message):
         text = text.replace(key, "")
     text = re.sub(r"^@\S+\s*", "", text).strip()
-    return {"message_id": message_id, "clean_text": " ".join(text.split()).strip()}
+    return {"message_id": message_id, "clean_text": " ".join(text.split()).strip(), "chat_id": chat_id, "user_id": user_id}
 
 
 def get_feishu_tenant_access_token() -> str | None:

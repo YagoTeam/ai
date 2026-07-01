@@ -235,6 +235,13 @@ def nlp_query(payload: TextRequest) -> dict[str, Any]:
     return _safe(nlp_query_service.answer_user_question, payload.text)
 
 
+@app.post("/debug/agent_route")
+def debug_agent_route(payload: TextRequest) -> dict[str, Any]:
+    from services import agent_router
+
+    return _safe(agent_router.route_user_message, payload.text)
+
+
 @app.post("/debug/resolve_stock")
 def debug_resolve_stock(payload: TextRequest) -> dict[str, Any]:
     from services import stock_resolver

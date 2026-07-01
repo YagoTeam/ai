@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from services import engine_loader
-from services.nlp_intent import parse_user_question
+from services import agent_router, engine_loader, response_composer
+from services.conversation_memory import update_context
 from services.stock_resolver import resolve_stock
 
 
@@ -17,34 +17,75 @@ HELP_TEXT = """可用指令：
 7. @小牛牛 贵州茅台跌到多少可以买？"""
 
 
-def answer_user_question(text: str) -> dict[str, Any]:
-    parsed = parse_user_question(text)
-    intent = parsed["intent"]
+def answer_user_question(text: str, context: dict[str, Any] | None = None, chat_id: str | None = None, user_id: str | None = None) -> dict[str, Any]:
+    route = agent_router.route_user_message(text, context)
+    intent = route["intent"]
+    stock_payload: dict[str, Any] | None = None
 
-    if intent == "help":
-        return {"intent": intent, "stock": None, "reply": HELP_TEXT}
-    if intent == "top10":
-        return {"intent": intent, "stock": None, "reply": _top10_reply()}
-    if intent == "intraday_signals":
-        return {"intent": intent, "stock": None, "reply": _intraday_reply()}
-    if intent == "money_flow_anomalies":
-        return {"intent": intent, "stock": None, "reply": _money_flow_reply()}
-    if intent == "market_overview":
-        return {"intent": intent, "stock": None, "reply": _market_overview_reply()}
+    try:
+        if intent == "help":
+            reply = HELP_TEXT
+        elif intent == "top10":
+            rows = engine_loader.safe_call(engine_loader.scan_top10, 10).get("data")
+            reply = response_composer.compose_top10(rows if isinstance(rows, list) else [])
+        elif intent == "money_flow":
+            data = engine_loader.safe_call(engine_loader.moneyflow_anomaly, None, 10).get("data")
+            reply = response_composer.compose_money_flow(data if isinstance(data, dict) else {})
+        elif intent == "intraday":
+            data = engine_loader.safe_call(engine_loader.intraday_signal, None, 10).get("data")
+            reply = response_composer.compose_intraday(data if isinstance(data, dict) else {})
+        elif intent == "market":
+            data = engine_loader.safe_call(engine_loader.market_overview).get("data")
+            reply = response_composer.compose_market(data if isinstance(data, dict) else {})
+        elif route.get("requires_stock"):
+            stock = resolve_stock(route.get("stock_query") or text)
+            if not stock.get("matched"):
+                reply = response_composer.compose_unresolved(stock)
+                return {"route": route, "stock": None, "reply": reply, "resolver": stock}
+            stock_payload = _stock_payload(stock)
+            symbol = str(stock["symbol"])
+            route["symbols"] = [symbol]
+            if intent == "limit_up_probability":
+                data = analyze_limit_up_probability(symbol)
+                reply = response_composer.compose_limit_up(data)
+            elif intent == "portfolio":
+                portfolio = route.get("portfolio") if isinstance(route.get("portfolio"), dict) else {}
+                cost = float(portfolio.get("cost") or 0)
+                shares = int(portfolio.get("shares") or 0)
+                if cost <= 0 or shares <= 0:
+                    reply = "我识别到你在问持仓，但还缺成本价或股数。你可以这样问：我300394成本330，100股，现在怎么办？"
+                else:
+                    data = engine_loader.safe_call(
+                        engine_loader.portfolio_analyze,
+                        symbol,
+                        cost,
+                        shares,
+                        float(portfolio.get("available_cash") or 0),
+                        0.3,
+                        portfolio.get("risk_preference") or "稳健",
+                    ).get("data")
+                    reply = response_composer.compose_portfolio(data if isinstance(data, dict) else {})
+            else:
+                data = _analysis(symbol)
+                if not data:
+                    reply = "我识别到了你的问题，但行情数据源暂时不稳定，本次无法完成完整分析。你可以稍后再试。"
+                else:
+                    reply = response_composer.compose_stock_analysis(data, route)
+        else:
+            reply = response_composer.compose_unknown()
+    except Exception:
+        reply = "我识别到了你的问题，但行情数据源暂时不稳定，本次无法完成完整分析。你可以稍后再试。"
 
-    stock = resolve_stock(parsed.get("stock_query") or text)
-    if not stock.get("matched"):
-        return {"intent": intent, "stock": None, "reply": _unresolved_reply(stock), "resolver": stock}
-
-    symbol = str(stock["symbol"])
-    if intent == "limit_up_probability":
-        data = analyze_limit_up_probability(symbol)
-        return {"intent": intent, "stock": _stock_payload(stock), "reply": _limit_up_reply(data), "analysis": data}
-
-    data = _analysis(symbol)
-    if not data:
-        return {"intent": intent, "stock": _stock_payload(stock), "reply": "已识别到股票，但行情数据源暂时不可用，请稍后再试。"}
-    return {"intent": intent, "stock": _stock_payload(stock), "reply": _operation_reply(data, intent, parsed)}
+    if stock_payload:
+        update_context(
+            chat_id,
+            user_id,
+            last_stock=stock_payload,
+            last_intent=intent,
+            last_question=text,
+            last_result_summary=reply[:300],
+        )
+    return {"route": route, "stock": stock_payload, "reply": reply}
 
 
 def analyze_limit_up_probability(symbol: str) -> dict[str, Any]:
