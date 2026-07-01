@@ -13,7 +13,9 @@ HELP_TEXT = """可用指令：
 2. @小牛牛 300394
 3. @小牛牛 自动分析
 4. @小牛牛 盘中信号
-5. @小牛牛 主力异动"""
+5. @小牛牛 主力异动
+6. @小牛牛 天孚通信今天会涨停吗？
+7. @小牛牛 贵州茅台跌到多少可以买？"""
 
 _TOKEN_CACHE: dict[str, Any] = {"token": "", "expire_at": 0.0}
 
@@ -35,9 +37,10 @@ def handle_message_event(body: dict[str, Any]) -> None:
     reply_feishu_message(message_id, f"已收到：{clean_text}\n正在分析，请稍等。")
 
     try:
-        from services import wecom_service
+        from services import nlp_query_service
 
-        analysis_reply = wecom_service.build_reply_for_text(clean_text)
+        result = nlp_query_service.answer_user_question(clean_text)
+        analysis_reply = result.get("reply") if isinstance(result, dict) else ""
         if analysis_reply:
             reply_feishu_message(message_id, analysis_reply)
     except Exception as exc:

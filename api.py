@@ -63,6 +63,10 @@ class WeComTestRequest(BaseModel):
     text: str
 
 
+class TextRequest(BaseModel):
+    text: str
+
+
 def _ok(data: Any) -> dict[str, Any]:
     return {"success": True, "data": data, "error": ""}
 
@@ -222,6 +226,27 @@ def wecom_test(payload: WeComTestRequest) -> dict[str, Any]:
     from services import wecom_service
 
     return _safe(wecom_service.test_command, payload.text)
+
+
+@app.post("/nlp/query")
+def nlp_query(payload: TextRequest) -> dict[str, Any]:
+    from services import nlp_query_service
+
+    return _safe(nlp_query_service.answer_user_question, payload.text)
+
+
+@app.post("/debug/resolve_stock")
+def debug_resolve_stock(payload: TextRequest) -> dict[str, Any]:
+    from services import stock_resolver
+
+    return _safe(stock_resolver.resolve_stock, payload.text)
+
+
+@app.post("/debug/parse_intent")
+def debug_parse_intent(payload: TextRequest) -> dict[str, Any]:
+    from services import nlp_intent
+
+    return _safe(nlp_intent.parse_user_question, payload.text)
 
 
 @app.post("/feishu/callback")

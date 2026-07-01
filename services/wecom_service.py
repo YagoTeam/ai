@@ -171,22 +171,10 @@ def build_money_flow_reply(limit: int = 10) -> str:
 
 
 def resolve_symbol(keyword: str) -> str | None:
-    query = str(keyword or "").strip()
-    if not query:
-        return None
-    if query.replace(".", "").replace("SH", "").replace("SZ", "").isdigit():
-        try:
-            return engine_loader.normalize_symbol(query)
-        except Exception:
-            return query
-    result = engine_loader.safe_call(engine_loader.search_stock, query)
-    rows = result.get("data") if result.get("success") else []
-    if not isinstance(rows, list) or not rows:
-        return None
-    first = rows[0]
-    if isinstance(first, dict):
-        return first.get("code") or first.get("symbol")
-    return None
+    from services.stock_resolver import resolve_stock
+
+    result = resolve_stock(keyword)
+    return result.get("symbol") if result.get("matched") else None
 
 
 def parse_callback_xml(raw_body: bytes) -> WeComMessage:
