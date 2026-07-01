@@ -27,15 +27,13 @@ def resolve_stock(query: str) -> dict[str, Any]:
     if not text:
         return _unmatched("empty", [])
 
+    code = _extract_code(text)
+    if code:
+        return _resolve_code_in_text(code)
+
     stocks = _load_stock_dictionary()
     if not stocks:
         return _unmatched("stock dictionary unavailable", [])
-
-    code = _extract_code(text)
-    if code:
-        for stock in stocks:
-            if stock["code"] == code:
-                return _matched(stock, 1.0, "code", [])
 
     normalized_text = _apply_typos(text)
     compact_text = _compact(normalized_text)
@@ -155,6 +153,7 @@ def _build_rows(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def _seed_rows() -> list[dict[str, Any]]:
     records = [
         {"code": "300394", "name": "天孚通信"},
+        {"code": "002141", "name": "贤丰控股"},
         {"code": "001309", "name": "德明利"},
         {"code": "600519", "name": "贵州茅台"},
         {"code": "300750", "name": "宁德时代"},
@@ -259,6 +258,45 @@ def _unmatched(reason: str, candidates: list[dict[str, Any]]) -> dict[str, Any]:
     return {"matched": False, "reason": reason, "candidates": candidates}
 
 
+def _resolve_code_in_text(code: str) -> dict[str, Any]:
+    symbol = _symbol_from_code(code)
+    stock = _find_stock_by_code(code)
+    if stock:
+        stock = {**stock, "symbol": stock.get("symbol") or symbol, "code": code}
+        return _matched(stock, 1.0, "code_in_text", [])
+    name = _lookup_name_by_code(symbol) or code
+    return _matched({"symbol": symbol, "code": code, "name": name}, 1.0, "code_in_text", [])
+
+
+def _find_stock_by_code(code: str) -> dict[str, Any] | None:
+    for stock in _read_cache(ignore_ttl=True) or _seed_rows():
+        if stock.get("code") == code:
+            return stock
+    return None
+
+
+def _lookup_name_by_code(symbol: str) -> str | None:
+    try:
+        rows = engine_loader.search_stock(symbol.split(".")[0])
+        if rows and isinstance(rows[0], dict):
+            return str(rows[0].get("name") or "") or None
+    except Exception:
+        pass
+    try:
+        quote = engine_loader.get_provider().get_realtime_quote(symbol)
+        return str(quote.get("name") or "") or None
+    except Exception:
+        return None
+
+
+def _symbol_from_code(code: str) -> str:
+    if code.startswith("6"):
+        return f"{code}.SH"
+    if code.startswith(("8", "4")):
+        return f"{code}.BJ"
+    return f"{code}.SZ"
+
+
 def _normalize_query(query: str) -> str:
     return str(query or "").strip().upper().replace("。", "").replace("？", "").replace("?", "")
 
@@ -275,7 +313,8 @@ def _compact(text: str) -> str:
 
 
 def _extract_code(text: str) -> str | None:
-    match = re.search(r"(?<!\d)(\d{6})(?:\.(?:SZ|SH))?(?!\d)", text.upper())
+    compact = re.sub(r"\s+", "", text.upper())
+    match = re.search(r"(?<!\d)([03684]\d{5})(?:\.?(?:SZ|SH|BJ))?(?!\d)", compact)
     return match.group(1) if match else None
 
 

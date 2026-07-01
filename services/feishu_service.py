@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 from typing import Any
 
@@ -55,6 +56,7 @@ def parse_message_event(body: dict[str, Any]) -> dict[str, str]:
     text = _content_text(message.get("content"))
     for key in _mention_keys(message):
         text = text.replace(key, "")
+    text = re.sub(r"^@\S+\s*", "", text).strip()
     return {"message_id": message_id, "clean_text": " ".join(text.split()).strip()}
 
 

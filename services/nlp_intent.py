@@ -14,7 +14,7 @@ INTENT_PATTERNS = [
     ("add_position", ["加仓", "补仓", "还能补", "成本"]),
     ("sell_or_hold", ["要不要卖", "卖出", "还能拿", "持有", "止损", "割肉"]),
     ("target_price", ["跌到多少", "目标价", "支撑位", "压力位", "多少可以买", "买点"]),
-    ("buy_or_not", ["还能买吗", "可以买", "买入", "建仓", "适合买吗"]),
+    ("buy_or_not", ["还能买吗", "能买吗", "能不能买", "现在能买", "可以买", "买入", "建仓", "适合买吗"]),
 ]
 
 
@@ -46,9 +46,9 @@ def _extract_stock_query(text: str, intent: str) -> str:
     if intent in {"top10", "intraday_signals", "money_flow_anomalies", "market_overview", "help"}:
         return ""
 
-    code = re.search(r"(?<!\d)(\d{6})(?:\.(?:SZ|SH))?(?!\d)", cleaned.upper())
+    code = _extract_code(cleaned)
     if code:
-        return code.group(0)
+        return code
 
     stop_words = [
         "今天会涨停吗",
@@ -92,6 +92,7 @@ def _extract_stock_query(text: str, intent: str) -> str:
 def _question_part(text: str, stock_query: str) -> str:
     value = str(text or "")
     if stock_query:
+        value = re.sub(re.escape(stock_query) + r"\.?(SZ|SH|BJ)", "", value, flags=re.IGNORECASE)
         value = value.replace(stock_query, "")
     return value.strip(" ，。！？?")
 
@@ -116,3 +117,9 @@ def _risk_preference(text: str) -> str | None:
 
 def _compact(text: str) -> str:
     return re.sub(r"[\s,，。！？?、:：;；()（）【】\[\]{}<>《》\"'“”‘’]", "", str(text or "").upper())
+
+
+def _extract_code(text: str) -> str | None:
+    compact = re.sub(r"\s+", "", str(text or "").upper())
+    match = re.search(r"(?<!\d)([03684]\d{5})(?:\.?(?:SZ|SH|BJ))?(?!\d)", compact)
+    return match.group(1) if match else None
